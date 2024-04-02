@@ -17,6 +17,8 @@ const int cellPins[3][3] = {
   {21, 5, 15}
 };
 
+CRGB currentColor = CRGB::Blue;
+
 void setup() {
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS); 
 
@@ -33,7 +35,7 @@ void loop() {
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
       if (digitalRead(cellPins[x][y]) == LOW) {
-        Serial.print("Pad de pressão ativado: ");
+        Serial.print("Pressure Pad Activited - ");
         Serial.print("X: ");
         Serial.print(x);
         Serial.print(", Y: ");
@@ -41,9 +43,15 @@ void loop() {
 
         for (int i = 0; i < 6; i++) {
           int ledIndex = ledMappings[x][y][i];
-          leds[ledIndex] = CRGB::Red; 
+          leds[ledIndex] = currentColor; 
         }
         FastLED.show();
+
+        if (currentColor == CRGB::Blue) {
+          currentColor = CRGB::Yellow; 
+        } else {
+          currentColor = CRGB::Blue; 
+        }
 
         delay(1000);
       }
