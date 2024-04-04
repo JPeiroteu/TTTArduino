@@ -27,6 +27,8 @@ const int serverPort = 5000;
 
 char currentMarker = 'X'; // X blue LEDs and O green LEDs
 
+bool gameStarted = false;
+
 WiFiClient client;
 
 void setup() {
@@ -42,6 +44,7 @@ void setup() {
     }
   }
 }
+
 
 void loop() {
   String boardState = getBoardState();
@@ -59,7 +62,7 @@ void loop() {
   updateLeds(doc);
 
   // Check any pressed cell
-  checkAndMarkCells();
+  checkAndMarkCells(doc);
 }
 
 void connectToWiFi() {
@@ -105,6 +108,11 @@ String getBoardState() {
 
 void updateLeds(JsonDocument &doc) {
   JsonArray grid = doc["grid"].as<JsonArray>();
+  
+  if (!gameStarted) {
+    displayMessage("TIC TAC TOE");
+  }
+
   for (JsonObject cell : grid) {
     int x = cell["x"];
     int y = cell["y"];
@@ -120,16 +128,146 @@ void updateLeds(JsonDocument &doc) {
   delay(100);
 }
 
-void checkAndMarkCells() {
-  for (int x = 0; x < 3; x++) {
-    for (int y = 0; y < 3; y++) {
-      if (digitalRead(cellPins[x][y]) == LOW) {
-        markCell(x, y, currentMarker);
-        currentMarker = (currentMarker == 'X') ? 'O' : 'X';
-        delay(100);
+void checkAndMarkCells(JsonDocument &doc) {
+  JsonArray grid = doc["grid"].as<JsonArray>();
+
+  if (!gameStarted) {
+    for (JsonObject cell : grid) {
+      const char* marker = cell["marker"];
+      if (strcmp(marker, " ") != 0) {
+        gameStarted = true;
+        break;
       }
     }
   }
+
+  if (gameStarted) {
+    for (int x = 0; x < 3; x++) {
+      for (int y = 0; y < 3; y++) {
+        if (digitalRead(cellPins[x][y]) == LOW) {
+          markCell(x, y, currentMarker);
+          currentMarker = (currentMarker == 'X') ? 'O' : 'X';
+          delay(500); 
+        }
+      }
+    }
+  }
+}
+
+void displayMessage(String message) {
+  int letterIndex = 0;
+  for (int i = 0; i < message.length(); i++) {
+    switch (message[i]) {
+      case 'T':
+        displayLetterT();
+        break;
+      case 'I':
+        displayLetterI();
+        break;
+      case 'C':
+        displayLetterC();
+        break;
+      case 'A':
+        displayLetterA();
+        break;
+      case 'O':
+        displayLetterO();
+        break;
+      case 'E':
+        displayLetterE();
+        break;
+      case ' ':
+        break;
+    }
+    delay(1000);
+    clearLeds(); 
+  }
+}
+
+void displayLetterT() {
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[0][0][i]] = CRGB::Blue;
+    leds[ledMappings[0][1][i]] = CRGB::Blue;
+    leds[ledMappings[0][2][i]] = CRGB::Blue;
+    leds[ledMappings[1][1][i]] = CRGB::Blue;
+    leds[ledMappings[2][1][i]] = CRGB::Blue;
+  }
+  FastLED.show();
+  delay(100); 
+}
+
+void displayLetterI() {
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[0][1][i]] = CRGB::Blue;
+    leds[ledMappings[1][1][i]] = CRGB::Blue;
+    leds[ledMappings[2][1][i]] = CRGB::Blue;
+  }
+  FastLED.show();
+  delay(100); 
+}
+
+void displayLetterC() {
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[0][2][i]] = CRGB::Blue;
+    leds[ledMappings[0][1][i]] = CRGB::Blue;
+    leds[ledMappings[0][0][i]] = CRGB::Blue;
+    leds[ledMappings[1][0][i]] = CRGB::Blue;
+    leds[ledMappings[2][0][i]] = CRGB::Blue;
+    leds[ledMappings[2][1][i]] = CRGB::Blue;
+    leds[ledMappings[2][2][i]] = CRGB::Blue;
+  }
+  FastLED.show();
+  delay(100); 
+}
+
+void displayLetterA() {
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[2][0][i]] = CRGB::Blue;
+    leds[ledMappings[1][0][i]] = CRGB::Blue;
+    leds[ledMappings[0][1][i]] = CRGB::Blue;
+    leds[ledMappings[1][2][i]] = CRGB::Blue;
+    leds[ledMappings[2][2][i]] = CRGB::Blue;
+  }
+  FastLED.show();
+  delay(100); 
+}
+
+void displayLetterO() {
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[0][0][i]] = CRGB::Blue;
+    leds[ledMappings[0][1][i]] = CRGB::Blue;
+    leds[ledMappings[0][2][i]] = CRGB::Blue;
+    leds[ledMappings[1][2][i]] = CRGB::Blue;
+    leds[ledMappings[2][2][i]] = CRGB::Blue;
+    leds[ledMappings[2][1][i]] = CRGB::Blue;
+    leds[ledMappings[2][0][i]] = CRGB::Blue;
+    leds[ledMappings[1][0][i]] = CRGB::Blue;
+  }
+  FastLED.show();
+  delay(100); 
+}
+
+void displayLetterE() {
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[0][0][i]] = CRGB::Blue;
+    leds[ledMappings[0][1][i]] = CRGB::Blue;
+    leds[ledMappings[0][2][i]] = CRGB::Blue;
+    leds[ledMappings[1][2][i]] = CRGB::Blue;
+    leds[ledMappings[2][2][i]] = CRGB::Blue;
+    leds[ledMappings[2][1][i]] = CRGB::Blue;
+    leds[ledMappings[2][0][i]] = CRGB::Blue;
+    leds[ledMappings[1][0][i]] = CRGB::Blue;
+    leds[ledMappings[1][1][i]] = CRGB::Blue;
+  }
+  FastLED.show();
+  delay(100); 
+}
+
+void clearLeds() {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Black;
+  }
+  FastLED.show(); 
 }
 
 void markCell(int x, int y, char marker) {
