@@ -4,28 +4,36 @@
 #include <ArduinoJson.h>
 
 #define NUM_LEDS 54
-#define DATA_PIN 13
+#define DATA_PIN 13 // LEDs data pin
 
 CRGB leds[NUM_LEDS];
 
+// LED mappings for each cell
 const int ledMappings[3][3][6] = {
   {{6, 7, 8, 9, 10, 11}, {24, 25, 26, 27, 28, 29}, {42, 43, 44, 45, 46, 47}},
   {{3, 4, 5, 12, 13, 14}, {21, 22, 23, 30, 31, 32}, {39, 40, 41, 48, 49, 50}},
   {{0, 1, 2, 15, 16, 17}, {18, 19, 20, 33, 34, 35}, {36, 37, 38, 51, 52, 53}}
 };
 
+// Cells pins
 const int cellPins[3][3] = {
   {23, 19, 4},
   {22, 18, 2},
   {21, 5, 15}
 };
 
-const char* serverAddress = "192.168.1.122";
+const char *serverAddress = "192.168.1.122";
 const int serverPort = 5000;
+
+char currentMarker = 'X'; // X blue LEDs and O green LEDs
 
 WiFiClient client;
 
 void setup() {
+  Serial.begin(9600);
+
+  connectToWiFi();
+
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS); 
 
   for (int x = 0; x < 3; x++) {
@@ -33,38 +41,36 @@ void setup() {
       pinMode(cellPins[x][y], INPUT_PULLUP);
     }
   }
-
-  Serial.begin(9600);
-
-  connectToWiFi();
 }
 
 void loop() {
   String boardState = getBoardState();
-  DynamicJsonDocument doc(1024);
-
-  JsonArray grid = doc["grid"].as<JsonArray>();
-  for (JsonObject cell : grid) {
-    int x = cell["x"];
-    int y = cell["y"];
-    const char* marker = cell["marker"];
-
-    for (int i = 0; i < 6; i++) {
-      int ledIndex = ledMappings[x][y][i];
-      leds[ledIndex] = (strcmp(marker, "X") == 0) ? CRGB::Blue : (strcmp(marker, "O") == 0) ? CRGB::Green : CRGB::Black;
-    }
-  }
   
-  FastLED.show();
-  delay(1000); 
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, boardState);
+
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.c_str());
+    return;
+  }
+
+  // Update LEDs based on board state
+  updateLeds(doc);
+
+  // Check any pressed cell
+  checkAndMarkCells();
 }
 
 void connectToWiFi() {
+  Serial.println("Connecting to WiFi...");
   WiFi.begin(ssid, password);
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Attempting to connect to WiFi...");
   }
+
   Serial.println("Connected to WiFi");
 }
 
@@ -84,14 +90,72 @@ String getBoardState() {
         if (line == "\r") {
           isBody = true;
         } else if (isBody) {
-          response += line;
+          response += line; // JSON body
         }
       }
     }
-    
     client.stop();
+    Serial.println(response);
     return response;
   } else {
+    Serial.println("Failed to connect to server");
     return "";
+  }
+}
+
+void updateLeds(JsonDocument &doc) {
+  JsonArray grid = doc["grid"].as<JsonArray>();
+  for (JsonObject cell : grid) {
+    int x = cell["x"];
+    int y = cell["y"];
+    const char* marker = cell["marker"];
+
+    for (int i = 0; i < 6; i++) {
+      int ledIndex = ledMappings[x][y][i];
+      leds[ledIndex] = (strcmp(marker, "X") == 0) ? CRGB::Blue : (strcmp(marker, "O") == 0) ? CRGB::Green : CRGB::Black;
+    }
+  }
+  
+  FastLED.show();
+  delay(100);
+}
+
+void checkAndMarkCells() {
+  for (int x = 0; x < 3; x++) {
+    for (int y = 0; y < 3; y++) {
+      if (digitalRead(cellPins[x][y]) == LOW) {
+        markCell(x, y, currentMarker);
+        currentMarker = (currentMarker == 'X') ? 'O' : 'X';
+        delay(100);
+      }
+    }
+  }
+}
+
+void markCell(int x, int y, char marker) {
+  String postData = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
+
+  sendPostRequest("/cell/mark", postData);
+}
+
+void sendPostRequest(String path, String data) {
+  if (client.connect(serverAddress, serverPort)) {
+    client.println("POST " + path + " HTTP/1.1");
+    client.println("Host: " + String(serverAddress));
+    client.println("Content-Type: application/x-www-form-urlencoded");
+    client.print("Content-Length: ");
+    client.println(data.length());
+    client.println();
+    client.println(data);
+
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        Serial.println(line);
+      }
+    }
+    client.stop();
+  } else {
+    Serial.println("Failed to connect to server");
   }
 }
