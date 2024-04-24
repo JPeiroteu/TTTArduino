@@ -27,6 +27,7 @@ const int serverPort = 5000;  //5000 or 8000
 
 String currentPlayer; 
 bool gameStarted = false;
+DynamicJsonDocument doc(1024);
 
 WiFiClient client;
 
@@ -38,37 +39,19 @@ void setup() {
 
 
 void loop() {
-  
-  String boardState = getBoardState();
-  
-  DynamicJsonDocument doc(1024);
-  DeserializationError error = deserializeJson(doc, boardState);
-
-  if (error) {
-    Serial.print(F("deserializeJson() failed: "));
-    Serial.println(error.c_str());
-    return;
-  }
-
-  // Update LEDs based on board state
+  getBoardState();
   updateLeds(doc);   
-  // Check any pressed cell
   checkAndMarkCells(doc);
-
+  checkWinner();
   
-
   if (!gameStarted) {
     displayMessage("TIC TAC TOE", doc);
   }
-
-  checkWinner();
-
-  
 }
 
 void connectToWiFi() {
   Serial.println("Connecting to WiFi...");
-  WiFi.begin(ssid, password); //WiFi.begin(ssid, password);
+  WiFi.begin(ssid); //WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -109,6 +92,15 @@ String getBoardState() {
       }
     }
     client.stop();
+
+    
+    DeserializationError error = deserializeJson(doc, response);
+    if (error) {
+      Serial.print(F("getBoardState deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      return "";
+    }
+    
     Serial.println(response);
     return response;
   } else {
@@ -132,15 +124,12 @@ void updateLeds(JsonDocument &doc) {
   }
   
   FastLED.show();
-  delay(100);
 }
 
 String getCurrentPlayer() {
   if (client.connect(serverAddress, serverPort)) {
-    client.print("GET /player/current HTTP/1.1\r\n");
-    client.print("Host: ");
-    client.print(serverAddress);
-    client.println("\r\nConnection: close\r\n");
+    client.printf("GET /player/current HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+
     
     String response = "";
     bool isBody = false;
@@ -156,10 +145,15 @@ String getCurrentPlayer() {
       }
     }
     client.stop();
-    Serial.println(response);
 
     DynamicJsonDocument doc(1024);
-    deserializeJson(doc, response);
+    DeserializationError error = deserializeJson(doc, response);
+    if (error) {
+      Serial.print(F("getCurrentPlayer deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      return "";
+    }
+
     currentPlayer = doc["currentPlayer"].as<String>();  
 
     Serial.print("O jogador atual é: ");
@@ -173,6 +167,7 @@ String getCurrentPlayer() {
 }
 
 bool checkAndMarkCells(JsonDocument &doc) {
+  getBoardState();
   JsonArray grid = doc["grid"].as<JsonArray>();
 
   for (JsonObject cell : grid) {
@@ -183,7 +178,6 @@ bool checkAndMarkCells(JsonDocument &doc) {
     } else {
         gameStarted = false;
     }
-
   }
 
   for (int x = 0; x < 3; x++) {
@@ -192,16 +186,98 @@ bool checkAndMarkCells(JsonDocument &doc) {
         currentPlayer = getCurrentPlayer();
         markCell(x, y, currentPlayer);
         gameStarted = true;
-        delay(500); 
+        break;
       }
     }
   }
   return gameStarted;
 }
 
+void markCell(int x, int y, String marker) {
+  String data = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
+
+  if (client.connect(serverAddress, serverPort)) {
+    client.printf("POST /cell/mark HTTP/1.1\r\nHost: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n%s", serverAddress, data.length(), data.c_str());
+
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        Serial.println(line);
+      }
+    }
+    client.stop();
+  } else {
+    Serial.println("Failed to connect to server");
+  }
+}
+
+void checkWinner() {
+  if (client.connect(serverAddress, serverPort)) {
+    client.printf("GET /check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+
+    
+    String response = "";
+    bool isBody = false;
+    
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") {
+          isBody = true;
+        } else if (isBody) {
+          response += line;
+        }
+      }
+    }
+    client.stop();
+    
+    // Parse response to check for winner
+    if (response.length() > 0) {
+      // Parse JSON response
+      DynamicJsonDocument doc(1024);
+      DeserializationError error = deserializeJson(doc, response);
+      
+      if (!error) {
+        JsonObject winnerData = doc["win_cell"];
+        if (!winnerData.isNull()) {
+          // Extract winner's cells coordinates
+          int x1 = winnerData["x"];
+          int y1 = winnerData["y"];
+          JsonObject winnerData2 = doc["win_cell2"];
+          int x2 = winnerData2["x"];
+          int y2 = winnerData2["y"];
+          JsonObject winnerData3 = doc["win_cell3"];
+          int x3 = winnerData3["x"];
+          int y3 = winnerData3["y"];
+          
+          // Make winning cells blink
+          blinkWinningCells(x1, y1, x2, y2, x3, y3);
+          Serial.println(response);
+        }
+      }
+    }
+  }
+}
+void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
+  for (int i = 0; i < 6; i++) {
+    int ledIndex1 = ledMappings[x1][y1][i];
+    int ledIndex2 = ledMappings[x2][y2][i];
+    int ledIndex3 = ledMappings[x3][y3][i];
+    
+    leds[ledIndex1] = CRGB::Black; // Turn on LED 1
+    leds[ledIndex2] = CRGB::Black; // Turn on LED 2
+    leds[ledIndex3] = CRGB::Black; // Turn on LED 3
+  }
+  FastLED.show();
+  delay(300); // Blink duration
+}
+
 
 void displayMessage(String message, JsonDocument &doc) {
   for (int i = 0; i < message.length(); i++) {
+    if (checkAndMarkCells(doc)) {
+      return;
+    }
     switch (message[i]) {
       case 'T':
         displayLetterT();
@@ -224,13 +300,17 @@ void displayMessage(String message, JsonDocument &doc) {
       case ' ':
         break;
     }
-    if (checkAndMarkCells(doc)) {
-      return;
-    }
 
-    delay(1000);
+    delay(800);
     clearLeds(); 
   }
+}
+
+void clearLeds() {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Black;
+  }
+  FastLED.show(); 
 }
 
 void displayLetterT() {
@@ -310,104 +390,4 @@ void displayLetterE() {
   }
   FastLED.show();
   delay(100); 
-}
-
-void clearLeds() {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = CRGB::Black;
-  }
-  FastLED.show(); 
-}
-
-void markCell(int x, int y, String marker) {
-  String postData = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
-
-  sendPostRequest("/cell/mark", postData);
-}
-
-void sendPostRequest(String path, String data) {
-  if (client.connect(serverAddress, serverPort)) {
-    client.println("POST " + path + " HTTP/1.1");
-    client.println("Host: " + String(serverAddress));
-    client.println("Content-Type: application/x-www-form-urlencoded");
-    client.print("Content-Length: ");
-    client.println(data.length());
-    client.println();
-    client.println(data);
-
-    while (client.connected() || client.available()) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        Serial.println(line);
-      }
-    }
-    client.stop();
-  } else {
-    Serial.println("Failed to connect to server");
-  }
-}
-
-void checkWinner() {
-  if (client.connect(serverAddress, serverPort)) {
-    client.println("GET /check_winner HTTP/1.1");
-    client.print("Host: ");
-    client.println(serverAddress);
-    client.println("Connection: close");
-    client.println();
-
-    
-    String response = "";
-    bool isBody = false;
-    
-    while (client.connected() || client.available()) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        if (line == "\r") {
-          isBody = true;
-        } else if (isBody) {
-          response += line;
-        }
-      }
-    }
-    client.stop();
-    
-    // Parse response to check for winner
-    if (response.length() > 0) {
-      // Parse JSON response
-      DynamicJsonDocument doc(1024);
-      DeserializationError error = deserializeJson(doc, response);
-      
-      if (!error) {
-        JsonObject winnerData = doc["win_cell"];
-        if (!winnerData.isNull()) {
-          // Extract winner's cells coordinates
-          int x1 = winnerData["x"];
-          int y1 = winnerData["y"];
-          JsonObject winnerData2 = doc["win_cell2"];
-          int x2 = winnerData2["x"];
-          int y2 = winnerData2["y"];
-          JsonObject winnerData3 = doc["win_cell3"];
-          int x3 = winnerData3["x"];
-          int y3 = winnerData3["y"];
-          
-          // Make winning cells blink
-          blinkWinningCells(x1, y1, x2, y2, x3, y3);
-          Serial.println(response);
-        }
-      }
-    }
-  }
-}
-void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
-  for (int i = 0; i < 6; i++) {
-    int ledIndex1 = ledMappings[x1][y1][i];
-    int ledIndex2 = ledMappings[x2][y2][i];
-    int ledIndex3 = ledMappings[x3][y3][i];
-    
-    leds[ledIndex1] = CRGB::Black; // Turn on LED 1
-    leds[ledIndex2] = CRGB::Black; // Turn on LED 2
-    leds[ledIndex3] = CRGB::Black; // Turn on LED 3
-  }
-  FastLED.show();
-  delay(300); // Blink duration
 }
