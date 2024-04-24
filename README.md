@@ -34,6 +34,7 @@ The ESP32 controller facilitates real-time communication and control of the LED 
    - AsyncTCP
    - ArduinoJson
    - ArduinoUnit
+
 Install these libraries using the Arduino Library Manager (`Sketch > Include Library > Manage Libraries`).
 
 ## Circuit Design
