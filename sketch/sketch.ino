@@ -2,6 +2,7 @@
 #include <FastLED.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <AsyncTCP.h>
 
 #define NUM_LEDS 54
 #define DATA_PIN 13 // LED data pin
@@ -27,7 +28,8 @@ const int serverPort = 5000;  //5000 or 8000
 
 String currentPlayer; 
 bool gameStarted = false;
-DynamicJsonDocument doc(1024);
+bool getBoard = false;
+DynamicJsonDocument doc(1024); // TODO: Remove and place inside async onData.
 
 WiFiClient client;
 
@@ -39,8 +41,11 @@ void setup() {
 
 
 void loop() {
-  getBoardState();
-  updateLeds(doc);   
+  if (!getBoard) {
+    getBoardState();
+  }
+
+  updateLeds(doc);
   checkAndMarkCells(doc);
   checkWinner();
   
@@ -51,7 +56,7 @@ void loop() {
 
 void connectToWiFi() {
   Serial.println("Connecting to WiFi...");
-  WiFi.begin(ssid); //WiFi.begin(ssid, password);
+  WiFi.begin(ssid, password); //WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -71,41 +76,38 @@ void initializeBoard() {
   }
 }
 
-String getBoardState() {
-  if (client.connect(serverAddress, serverPort)) {
-    client.print("GET /board HTTP/1.1\r\n");
-    client.print("Host: ");
-    client.print(serverAddress);
-    client.println("\r\nConnection: close\r\n");
-    
-    String response = "";
-    bool isBody = false;
-    
-    while (client.connected() || client.available()) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        if (line == "\r") {
-          isBody = true;
-        } else if (isBody) {
-          response += line; // JSON body
-        }
-      }
-    }
-    client.stop();
+void getBoardState() {
+  if (!getBoard) {
+    getBoard = true; 
+    AsyncClient *asyncClient = new AsyncClient();
 
-    
-    DeserializationError error = deserializeJson(doc, response);
-    if (error) {
-      Serial.print(F("getBoardState deserializeJson() failed: "));
-      Serial.println(error.c_str());
-      return "";
+    asyncClient->onConnect([](void* arg, AsyncClient* c) {
+      Serial.println("Connected, getting board ...");
+      c->write(("GET /board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
+    }, nullptr);
+
+    asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
+      String boardState = String((char*)data).substring(0, len);
+      Serial.print("Data: ");
+      Serial.println(boardState);
+      deserializeJson(doc, boardState);
+      Serial.println("Board state obtained");
+    }, nullptr);
+
+    asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
+      Serial.println("Disconnected");
+      c->close();
+      delete c; // Free memory after disconnection
+      getBoard = false;
+    }, nullptr);
+
+    if (!asyncClient->connect(serverAddress, serverPort)) {
+      Serial.println("Connection failed");
+      delete asyncClient;
+      getBoard = false;
     }
-    
-    Serial.println(response);
-    return response;
   } else {
-    Serial.println("Failed to connect to server");
-    return "";
+    Serial.println("Board state update in progress...");
   }
 }
 
@@ -167,7 +169,6 @@ String getCurrentPlayer() {
 }
 
 bool checkAndMarkCells(JsonDocument &doc) {
-  getBoardState();
   JsonArray grid = doc["grid"].as<JsonArray>();
 
   for (JsonObject cell : grid) {
@@ -197,7 +198,9 @@ void markCell(int x, int y, String marker) {
   String data = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
 
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("POST /cell/mark HTTP/1.1\r\nHost: %s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n%s", serverAddress, data.length(), data.c_str());
+    client.printf("POST /cell/mark HTTP/1.1\r\nHost: %s\r\n"
+      "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n%s",
+      serverAddress, data.length(), data.c_str());
 
     while (client.connected() || client.available()) {
       if (client.available()) {
@@ -209,6 +212,8 @@ void markCell(int x, int y, String marker) {
   } else {
     Serial.println("Failed to connect to server");
   }
+
+  
 }
 
 void checkWinner() {
@@ -269,7 +274,7 @@ void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
     leds[ledIndex3] = CRGB::Black; // Turn on LED 3
   }
   FastLED.show();
-  delay(300); // Blink duration
+  delay(1000); // Blink duration
 }
 
 
