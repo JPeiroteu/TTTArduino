@@ -6,6 +6,7 @@
 
 #define NUM_LEDS 54
 #define DATA_PIN 13 // LED data pin
+#define BUTTON_PIN 12 // Button pin for reset
 
 CRGB leds[NUM_LEDS];
 
@@ -29,7 +30,7 @@ const int serverPort = 5000;  //5000 or 8000
 String currentPlayer; 
 bool gameStarted = false;
 bool getBoard = false;
-DynamicJsonDocument doc(1024); // TODO: Remove and place inside async onData.
+DynamicJsonDocument doc(1024); 
 
 WiFiClient client;
 
@@ -37,6 +38,7 @@ void setup() {
   Serial.begin(9600);
   connectToWiFi();
   initializeBoard();
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 }
 
 
@@ -51,6 +53,12 @@ void loop() {
   
   if (!gameStarted) {
     displayMessage("TIC TAC TOE", doc);
+  }
+
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    Serial.println("Reset button pressed. Resetting game...");
+    resetGame();
+    delay(1000);
   }
 }
 
@@ -220,7 +228,6 @@ void checkWinner() {
   if (client.connect(serverAddress, serverPort)) {
     client.printf("GET /check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
-    
     String response = "";
     bool isBody = false;
     
@@ -263,6 +270,29 @@ void checkWinner() {
     }
   }
 }
+
+void resetGame() {
+  Serial.println("Resetting game...");
+
+  if (client.connect(serverAddress, serverPort)) {
+    client.printf("GET /reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+
+    while (client.connected()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        Serial.println(line);
+      }
+    }
+
+    // Close the connection
+    client.stop();
+
+    Serial.println("Game reset successfully.");
+  } else {
+    Serial.println("Failed to connect to server.");
+  }
+}
+
 void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
   for (int i = 0; i < 6; i++) {
     int ledIndex1 = ledMappings[x1][y1][i];
