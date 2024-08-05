@@ -85,39 +85,38 @@ void initializeBoard() {
 }
 
 void getBoardState() {
-  if (!getBoard) {
-    getBoard = true; 
-    AsyncClient *asyncClient = new AsyncClient();
+  getBoard = true; 
+  AsyncClient *asyncClient = new AsyncClient();
 
-    asyncClient->onConnect([](void* arg, AsyncClient* c) {
-      Serial.println("Connected, getting board ...");
-      c->write(("GET /board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
-    }, nullptr);
+  asyncClient->onConnect([](void* arg, AsyncClient* c) {
+    Serial.println("Connected, getting board ...");
+    c->write(("GET game/0/board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
+  }, nullptr);
 
-    asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
-      String boardState = String((char*)data).substring(0, len);
-      Serial.print("Data: ");
-      Serial.println(boardState);
-      deserializeJson(doc, boardState);
-      Serial.println("Board state obtained");
-    }, nullptr);
+  asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
+    String boardState = String((char*)data).substring(0, len);
+    Serial.print("Data: ");
+    Serial.println(boardState);
+    deserializeJson(doc, boardState);
+    Serial.println("Board state obtained");
+  }, nullptr);
 
-    asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
-      Serial.println("Disconnected");
-      c->close();
-      delete c; // Free memory after disconnection
-      getBoard = false;
-    }, nullptr);
+  asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
+    Serial.println("Disconnected");
+    c->close();
+    delete c; // Free memory after disconnection
+    getBoard = false;
+  }, nullptr);
 
-    if (!asyncClient->connect(serverAddress, serverPort)) {
-      Serial.println("Connection failed");
-      delete asyncClient;
-      getBoard = false;
-    }
+  if (!asyncClient->connect(serverAddress, serverPort)) {
+    Serial.println("Connection failed");
+    delete asyncClient;
+    getBoard = false;
   } else {
     Serial.println("Board state update in progress...");
   }
 }
+
 
 void updateLeds(JsonDocument &doc) {
   JsonArray grid = doc["grid"].as<JsonArray>();
@@ -138,7 +137,7 @@ void updateLeds(JsonDocument &doc) {
 
 String getCurrentPlayer() {
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("GET /player/current HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+    client.printf("GET game/0/player/current HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
     
     String response = "";
@@ -166,10 +165,10 @@ String getCurrentPlayer() {
 
     currentPlayer = doc["currentPlayer"].as<String>();  
 
-    Serial.print("O jogador atual é: ");
+    Serial.print("Current player is: ");
     Serial.println(currentPlayer);
 
-    return currentPlayer; // Retorna o jogador atual como uma String
+    return currentPlayer;
   } else {
     Serial.println("Failed to connect to server");
     return "";
@@ -206,7 +205,7 @@ void markCell(int x, int y, String marker) {
   String data = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
 
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("POST /cell/mark HTTP/1.1\r\nHost: %s\r\n"
+    client.printf("POST game/0/cell/mark HTTP/1.1\r\nHost: %s\r\n"
       "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n%s",
       serverAddress, data.length(), data.c_str());
 
@@ -226,7 +225,7 @@ void markCell(int x, int y, String marker) {
 
 void checkWinner() {
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("GET /check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+    client.printf("GET game/0/check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
     String response = "";
     bool isBody = false;
@@ -275,7 +274,7 @@ void resetGame() {
   Serial.println("Resetting game...");
 
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("GET /reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+    client.printf("GET game/0/reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
     while (client.connected()) {
       if (client.available()) {
