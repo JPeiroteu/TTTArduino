@@ -41,7 +41,6 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 }
 
-
 void loop() {
   if (!getBoard) {
     getBoardState();
@@ -64,7 +63,7 @@ void loop() {
 
 void connectToWiFi() {
   Serial.println("Connecting to WiFi...");
-  WiFi.begin(ssid, password); //WiFi.begin(ssid, password);
+  WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -75,7 +74,7 @@ void connectToWiFi() {
 }
 
 void initializeBoard() {
-  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS); 
+  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
 
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
@@ -97,8 +96,16 @@ void getBoardState() {
     String boardState = String((char*)data).substring(0, len);
     Serial.print("Data: ");
     Serial.println(boardState);
-    deserializeJson(doc, boardState);
-    Serial.println("Board state obtained");
+    DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
+    DeserializationError error = deserializeJson(tempDoc, boardState);
+    if (!error) {
+      doc.clear(); // Clear the existing document
+      doc = tempDoc; // Copy the temporary document to the main document
+      Serial.println("Board state obtained");
+    } else {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+    }
   }, nullptr);
 
   asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
@@ -116,7 +123,6 @@ void getBoardState() {
     Serial.println("Board state update in progress...");
   }
 }
-
 
 void updateLeds(JsonDocument &doc) {
   JsonArray grid = doc["grid"].as<JsonArray>();
@@ -139,7 +145,6 @@ String getCurrentPlayer() {
   if (client.connect(serverAddress, serverPort)) {
     client.printf("GET game/0/player/current HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
-    
     String response = "";
     bool isBody = false;
     
@@ -155,16 +160,15 @@ String getCurrentPlayer() {
     }
     client.stop();
 
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, response);
+    DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
+    DeserializationError error = deserializeJson(tempDoc, response);
     if (error) {
-      Serial.print(F("getCurrentPlayer deserializeJson() failed: "));
+      Serial.print(F("deserializeJson() failed: "));
       Serial.println(error.c_str());
       return "";
     }
 
-    currentPlayer = doc["currentPlayer"].as<String>();  
-
+    currentPlayer = tempDoc["currentPlayer"].as<String>();  
     Serial.print("Current player is: ");
     Serial.println(currentPlayer);
 
@@ -184,7 +188,7 @@ bool checkAndMarkCells(JsonDocument &doc) {
       gameStarted = true;
       break;
     } else {
-        gameStarted = false;
+      gameStarted = false;
     }
   }
 
@@ -219,8 +223,6 @@ void markCell(int x, int y, String marker) {
   } else {
     Serial.println("Failed to connect to server");
   }
-
-  
 }
 
 void checkWinner() {
@@ -242,29 +244,28 @@ void checkWinner() {
     }
     client.stop();
     
-    // Parse response to check for winner
     if (response.length() > 0) {
-      // Parse JSON response
-      DynamicJsonDocument doc(1024);
-      DeserializationError error = deserializeJson(doc, response);
+      DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
+      DeserializationError error = deserializeJson(tempDoc, response);
       
       if (!error) {
-        JsonObject winnerData = doc["win_cell"];
+        JsonObject winnerData = tempDoc["win_cell"];
         if (!winnerData.isNull()) {
-          // Extract winner's cells coordinates
           int x1 = winnerData["x"];
           int y1 = winnerData["y"];
-          JsonObject winnerData2 = doc["win_cell2"];
+          JsonObject winnerData2 = tempDoc["win_cell2"];
           int x2 = winnerData2["x"];
           int y2 = winnerData2["y"];
-          JsonObject winnerData3 = doc["win_cell3"];
+          JsonObject winnerData3 = tempDoc["win_cell3"];
           int x3 = winnerData3["x"];
           int y3 = winnerData3["y"];
           
-          // Make winning cells blink
           blinkWinningCells(x1, y1, x2, y2, x3, y3);
           Serial.println(response);
         }
+      } else {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.c_str());
       }
     }
   }
@@ -283,9 +284,7 @@ void resetGame() {
       }
     }
 
-    // Close the connection
     client.stop();
-
     Serial.println("Game reset successfully.");
   } else {
     Serial.println("Failed to connect to server.");
@@ -305,7 +304,6 @@ void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
   FastLED.show();
   delay(1000); // Blink duration
 }
-
 
 void displayMessage(String message, JsonDocument &doc) {
   for (int i = 0; i < message.length(); i++) {
@@ -339,6 +337,7 @@ void displayMessage(String message, JsonDocument &doc) {
     clearLeds(); 
   }
 }
+
 
 void clearLeds() {
   for (int i = 0; i < NUM_LEDS; i++) {
