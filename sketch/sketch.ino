@@ -30,6 +30,7 @@ const int serverPort = 5000;  //5000 or 8000
 String currentPlayer; 
 bool gameStarted = false;
 bool getBoard = false;
+bool getPlayer = false;
 DynamicJsonDocument doc(1024); 
 
 WiFiClient client;
@@ -85,6 +86,7 @@ void initializeBoard() {
 
 void getBoardState() {
   getBoard = true; 
+  getCurrentPlayer();
   AsyncClient *asyncClient = new AsyncClient();
 
   asyncClient->onConnect([](void* arg, AsyncClient* c) {
@@ -96,16 +98,11 @@ void getBoardState() {
     String boardState = String((char*)data).substring(0, len);
     Serial.print("Data: ");
     Serial.println(boardState);
-    DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
-    DeserializationError error = deserializeJson(tempDoc, boardState);
-    if (!error) {
-      doc.clear(); // Clear the existing document
-      doc = tempDoc; // Copy the temporary document to the main document
-      Serial.println("Board state obtained");
-    } else {
-      Serial.print(F("deserializeJson() failed: "));
-      Serial.println(error.c_str());
-    }
+    DynamicJsonDocument tempDoc(1024);
+    deserializeJson(tempDoc, boardState);
+    doc.clear();
+    doc = tempDoc;
+    Serial.println("Board state obtained");
   }, nullptr);
 
   asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
@@ -121,6 +118,46 @@ void getBoardState() {
     getBoard = false;
   } else {
     Serial.println("Board state update in progress...");
+  }
+}
+
+void getCurrentPlayer() {
+  if (!getPlayer) {
+    getPlayer = true;
+
+    AsyncClient* asyncClient = new AsyncClient();
+
+    asyncClient->onConnect([](void* arg, AsyncClient* c) {
+      Serial.println("Connected, getting current player ...");
+      c->write(("GET game/0/player/current HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
+    }, nullptr);
+
+    asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
+      String response = String((char*)data).substring(0, len);
+      Serial.print("Data: ");
+      Serial.println(response);
+
+      DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
+      deserializeJson(tempDoc, response);
+      currentPlayer = tempDoc["currentPlayer"].as<String>();
+      Serial.print("Current player is: ");
+      Serial.println(currentPlayer);
+    }, nullptr);
+
+    asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
+      Serial.println("Disconnected");
+      c->close();
+      delete c; // Free memory after disconnection
+      getPlayer = false;
+    }, nullptr);
+
+    if (!asyncClient->connect(serverAddress, serverPort)) {
+      Serial.println("Connection failed");
+      delete asyncClient;
+      getPlayer = false;
+    } else {
+      Serial.println("Current player update in progress...");
+    }
   }
 }
 
@@ -141,44 +178,6 @@ void updateLeds(JsonDocument &doc) {
   FastLED.show();
 }
 
-String getCurrentPlayer() {
-  if (client.connect(serverAddress, serverPort)) {
-    client.printf("GET game/0/player/current HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
-
-    String response = "";
-    bool isBody = false;
-    
-    while (client.connected() || client.available()) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        if (line == "\r") {
-          isBody = true;
-        } else if (isBody) {
-          response += line; // JSON body
-        }
-      }
-    }
-    client.stop();
-
-    DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
-    DeserializationError error = deserializeJson(tempDoc, response);
-    if (error) {
-      Serial.print(F("deserializeJson() failed: "));
-      Serial.println(error.c_str());
-      return "";
-    }
-
-    currentPlayer = tempDoc["currentPlayer"].as<String>();  
-    Serial.print("Current player is: ");
-    Serial.println(currentPlayer);
-
-    return currentPlayer;
-  } else {
-    Serial.println("Failed to connect to server");
-    return "";
-  }
-}
-
 bool checkAndMarkCells(JsonDocument &doc) {
   JsonArray grid = doc["grid"].as<JsonArray>();
 
@@ -195,7 +194,6 @@ bool checkAndMarkCells(JsonDocument &doc) {
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
       if (digitalRead(cellPins[x][y]) == LOW) {
-        currentPlayer = getCurrentPlayer();
         markCell(x, y, currentPlayer);
         gameStarted = true;
         break;
