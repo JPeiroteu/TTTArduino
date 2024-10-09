@@ -28,7 +28,6 @@ const char *serverAddress = "94.63.14.247"; //192.168.1.122 LAN, 10.72.73.124 IA
 const int serverPort = 5000;  //5000 or 8000
 
 String currentPlayer; 
-bool gameStarted = false;
 bool getBoard = false;
 bool getPlayer = false;
 DynamicJsonDocument doc(1024); 
@@ -50,10 +49,6 @@ void loop() {
   updateLeds(doc);
   checkAndMarkCells(doc);
   checkWinner();
-  
-  if (!gameStarted) {
-    displayMessage("TIC TAC TOE", doc);
-  }
 
   if (digitalRead(BUTTON_PIN) == LOW) {
     Serial.println("Reset button pressed. Resetting game...");
@@ -308,124 +303,4 @@ void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
   }
   FastLED.show();
   delay(1000); // Blink duration
-}
-
-void displayMessage(String message, JsonDocument &doc) {
-  for (int i = 0; i < message.length(); i++) {
-    if (checkAndMarkCells(doc)) {
-      return;
-    }
-    switch (message[i]) {
-      case 'T':
-        displayLetterT();
-        break;
-      case 'I':
-        displayLetterI();
-        break;
-      case 'C':
-        displayLetterC();
-        break;
-      case 'A':
-        displayLetterA();
-        break;
-      case 'O':
-        displayLetterO();
-        break;
-      case 'E':
-        displayLetterE();
-        break;
-      case ' ':
-        break;
-    }
-
-    delay(800);
-    clearLeds(); 
-  }
-}
-
-
-void clearLeds() {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = CRGB::Black;
-  }
-  FastLED.show(); 
-}
-
-void displayLetterT() {
-  for (int i = 0; i < 6; i++) {
-    leds[ledMappings[0][0][i]] = CRGB::Blue;
-    leds[ledMappings[0][1][i]] = CRGB::Blue;
-    leds[ledMappings[0][2][i]] = CRGB::Blue;
-    leds[ledMappings[1][1][i]] = CRGB::Blue;
-    leds[ledMappings[2][1][i]] = CRGB::Blue;
-  }
-  FastLED.show();
-  delay(100); 
-}
-
-void displayLetterI() {
-  for (int i = 0; i < 6; i++) {
-    leds[ledMappings[0][1][i]] = CRGB::Blue;
-    leds[ledMappings[1][1][i]] = CRGB::Blue;
-    leds[ledMappings[2][1][i]] = CRGB::Blue;
-  }
-  FastLED.show();
-  delay(100); 
-}
-
-void displayLetterC() {
-  for (int i = 0; i < 6; i++) {
-    leds[ledMappings[0][2][i]] = CRGB::Blue;
-    leds[ledMappings[0][1][i]] = CRGB::Blue;
-    leds[ledMappings[0][0][i]] = CRGB::Blue;
-    leds[ledMappings[1][0][i]] = CRGB::Blue;
-    leds[ledMappings[2][0][i]] = CRGB::Blue;
-    leds[ledMappings[2][1][i]] = CRGB::Blue;
-    leds[ledMappings[2][2][i]] = CRGB::Blue;
-  }
-  FastLED.show();
-  delay(100); 
-}
-
-void displayLetterA() {
-  for (int i = 0; i < 6; i++) {
-    leds[ledMappings[2][0][i]] = CRGB::Blue;
-    leds[ledMappings[1][0][i]] = CRGB::Blue;
-    leds[ledMappings[0][1][i]] = CRGB::Blue;
-    leds[ledMappings[1][2][i]] = CRGB::Blue;
-    leds[ledMappings[2][2][i]] = CRGB::Blue;
-  }
-  FastLED.show();
-  delay(100); 
-}
-
-void displayLetterO() {
-  for (int i = 0; i < 6; i++) {
-    leds[ledMappings[0][0][i]] = CRGB::Blue;
-    leds[ledMappings[0][1][i]] = CRGB::Blue;
-    leds[ledMappings[0][2][i]] = CRGB::Blue;
-    leds[ledMappings[1][2][i]] = CRGB::Blue;
-    leds[ledMappings[2][2][i]] = CRGB::Blue;
-    leds[ledMappings[2][1][i]] = CRGB::Blue;
-    leds[ledMappings[2][0][i]] = CRGB::Blue;
-    leds[ledMappings[1][0][i]] = CRGB::Blue;
-  }
-  FastLED.show();
-  delay(100); 
-}
-
-void displayLetterE() {
-  for (int i = 0; i < 6; i++) {
-    leds[ledMappings[0][0][i]] = CRGB::Blue;
-    leds[ledMappings[0][1][i]] = CRGB::Blue;
-    leds[ledMappings[0][2][i]] = CRGB::Blue;
-    leds[ledMappings[1][2][i]] = CRGB::Blue;
-    leds[ledMappings[2][2][i]] = CRGB::Blue;
-    leds[ledMappings[2][1][i]] = CRGB::Blue;
-    leds[ledMappings[2][0][i]] = CRGB::Blue;
-    leds[ledMappings[1][0][i]] = CRGB::Blue;
-    leds[ledMappings[1][1][i]] = CRGB::Blue;
-  }
-  FastLED.show();
-  delay(100); 
 }
