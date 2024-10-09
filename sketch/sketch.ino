@@ -153,6 +153,21 @@ void getCurrentPlayer() {
   }
 }
 
+void updateCellLeds(int x, int y, const char* marker) {
+  CRGB color;
+
+  if (strcmp(marker, "X") == 0) {
+    color = CRGB::Blue;
+  } else if (strcmp(marker, "O") == 0) {
+    color = CRGB::Green; 
+  }
+
+  for (int i = 0; i < 6; i++) {
+    int ledIndex = ledMappings[x][y][i];
+    leds[ledIndex] = color;
+  }
+}
+
 void updateLeds(JsonDocument &doc) {
   JsonArray grid = doc["grid"].as<JsonArray>();
 
@@ -161,48 +176,22 @@ void updateLeds(JsonDocument &doc) {
     int y = cell["y"];
     const char* marker = cell["marker"];
 
-    for (int i = 0; i < 6; i++) {
-      int ledIndex = ledMappings[x][y][i];
-      leds[ledIndex] = (strcmp(marker, "X") == 0) ? CRGB::Blue : (strcmp(marker, "O") == 0) ? CRGB::Green : CRGB::Black;
-    }
+    updateCellLeds(x, y, marker);
   }
-  
   FastLED.show();
 }
 
-bool checkAndMarkCells(JsonDocument &doc) {
+void checkAndMarkCells(JsonDocument &doc) {
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
       if (digitalRead(cellPins[x][y]) == LOW) {
-
         const char* marker = currentPlayer.c_str(); 
-        for (int i = 0; i < 6; i++) {
-          int ledIndex = ledMappings[x][y][i];
-          leds[ledIndex] = (strcmp(marker, "X") == 0) ? CRGB::Blue : (strcmp(marker, "O") == 0) ? CRGB::Green : CRGB::Black;
-        }
-        FastLED.show();
+        updateCellLeds(x, y, marker);
+        FastLED.show(); 
         markCell(x, y, currentPlayer);
-        gameStarted = true;
-
-        return gameStarted
       }
     }
   }
-
-  if (!gameStarted) {
-    JsonArray grid = doc["grid"].as<JsonArray>();
-
-    for (JsonObject cell : grid) {
-      const char* marker = cell["marker"];
-      if (strcmp(marker, " ") != 0) {
-        gameStarted = true;
-        break;
-      } else {
-        gameStarted = false;
-      }
-    }
-  }
-  return gameStarted;
 }
 
 void markCell(int x, int y, String marker) {
