@@ -102,7 +102,6 @@ void getBoardState() {
     deserializeJson(tempDoc, boardState);
     doc.clear();
     doc = tempDoc;
-    Serial.println("Board state obtained");
   }, nullptr);
 
   asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
@@ -140,8 +139,6 @@ void getCurrentPlayer() {
       DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
       deserializeJson(tempDoc, response);
       currentPlayer = tempDoc["currentPlayer"].as<String>();
-      Serial.print("Current player is: ");
-      Serial.println(currentPlayer);
     }, nullptr);
 
     asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
@@ -179,24 +176,34 @@ void updateLeds(JsonDocument &doc) {
 }
 
 bool checkAndMarkCells(JsonDocument &doc) {
-  JsonArray grid = doc["grid"].as<JsonArray>();
-
-  for (JsonObject cell : grid) {
-    const char* marker = cell["marker"];
-    if (strcmp(marker, " ") != 0) {
-      gameStarted = true;
-      break;
-    } else {
-      gameStarted = false;
-    }
-  }
-
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
       if (digitalRead(cellPins[x][y]) == LOW) {
+
+        const char* marker = currentPlayer.c_str(); 
+        for (int i = 0; i < 6; i++) {
+          int ledIndex = ledMappings[x][y][i];
+          leds[ledIndex] = (strcmp(marker, "X") == 0) ? CRGB::Blue : (strcmp(marker, "O") == 0) ? CRGB::Green : CRGB::Black;
+        }
+        FastLED.show();
         markCell(x, y, currentPlayer);
         gameStarted = true;
+
+        return gameStarted
+      }
+    }
+  }
+
+  if (!gameStarted) {
+    JsonArray grid = doc["grid"].as<JsonArray>();
+
+    for (JsonObject cell : grid) {
+      const char* marker = cell["marker"];
+      if (strcmp(marker, " ") != 0) {
+        gameStarted = true;
         break;
+      } else {
+        gameStarted = false;
       }
     }
   }
