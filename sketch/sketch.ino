@@ -6,7 +6,7 @@
 
 #define NUM_LEDS 54
 #define DATA_PIN 13 // LED data pin
-#define BUTTON_PIN 12 // Button pin for reset
+#define RESET_PIN 12 // Button pin for reset
 
 CRGB leds[NUM_LEDS];
 
@@ -17,7 +17,7 @@ const int ledMappings[3][3][6] = {
   {{0, 1, 2, 15, 16, 17}, {18, 19, 20, 33, 34, 35}, {36, 37, 38, 51, 52, 53}}
 };
 
-// Cells pins
+// Cells pins mapping
 const int cellPins[3][3] = {
   {23, 19, 4},
   {22, 18, 2},
@@ -28,35 +28,33 @@ const char *serverAddress = "94.63.14.247"; //192.168.1.122 LAN, 10.72.73.124 IA
 const int serverPort = 5000;  //5000 or 8000
 
 String currentPlayer; 
-bool getBoard = false;
-bool getPlayer = false;
-DynamicJsonDocument doc(1024); 
+bool boardState = false;
+bool playerState = false;
 
+DynamicJsonDocument doc(1024); 
 WiFiClient client;
 
 void setup() {
   Serial.begin(9600);
   connectToWiFi();
   initializeBoard();
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(RESET_PIN, INPUT_PULLUP);
 }
 
 void loop() {
-  if (!getBoard) {
-    getBoardState();
-  }
-
+  getBoardState();
   updateLeds(doc);
   checkAndMarkCells(doc);
   checkWinner();
 
-  if (digitalRead(BUTTON_PIN) == LOW) {
+  if (digitalRead(RESET_PIN) == LOW) {
     Serial.println("Reset button pressed. Resetting game...");
     resetGame();
     delay(1000);
   }
 }
 
+// WiFi connection function
 void connectToWiFi() {
   Serial.println("Connecting to WiFi...");
   WiFi.begin(ssid, password);
@@ -69,6 +67,7 @@ void connectToWiFi() {
   Serial.println("Connected to WiFi");
 }
 
+// Initialize the LED and board setup
 void initializeBoard() {
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
 
@@ -79,45 +78,51 @@ void initializeBoard() {
   }
 }
 
+// Fetch the current board state from the server
 void getBoardState() {
-  getBoard = true; 
-  getCurrentPlayer();
-  AsyncClient *asyncClient = new AsyncClient();
+  if (!boardState) {
+    boardState = true; 
+    getCurrentPlayer();
+    AsyncClient *asyncClient = new AsyncClient();
 
-  asyncClient->onConnect([](void* arg, AsyncClient* c) {
-    Serial.println("Connected, getting board ...");
-    c->write(("GET game/0/board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
-  }, nullptr);
+    asyncClient->onConnect([](void* arg, AsyncClient* c) {
+      Serial.println("Connected, getting board ...");
+      c->write(("GET game/0/board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
+    }, nullptr);
 
-  asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
-    String boardState = String((char*)data).substring(0, len);
-    Serial.print("Data: ");
-    Serial.println(boardState);
-    DynamicJsonDocument tempDoc(1024);
-    deserializeJson(tempDoc, boardState);
-    doc.clear();
-    doc = tempDoc;
-  }, nullptr);
+    asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
+      String boardState = String((char*)data).substring(0, len);
+      Serial.print("Data: ");
+      Serial.println(boardState);
 
-  asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
-    Serial.println("Disconnected");
-    c->close();
-    delete c; // Free memory after disconnection
-    getBoard = false;
-  }, nullptr);
+      // Deserialize the board state into a temporary JSON document
+      DynamicJsonDocument tempDoc(1024);
+      deserializeJson(tempDoc, boardState);
+      doc.clear();
+      doc = tempDoc;
+    }, nullptr);
 
-  if (!asyncClient->connect(serverAddress, serverPort)) {
-    Serial.println("Connection failed");
-    delete asyncClient;
-    getBoard = false;
-  } else {
-    Serial.println("Board state update in progress...");
+    asyncClient->onDisconnect([](void* arg, AsyncClient* c) {
+      Serial.println("Disconnected");
+      c->close();
+      delete c; // Free memory after disconnection
+      boardState = false; // Reset flag to allow future updates
+    }, nullptr);
+
+    if (!asyncClient->connect(serverAddress, serverPort)) {
+      Serial.println("Connection failed");
+      delete asyncClient;
+      boardState = false;
+    } else {
+      Serial.println("Board state update in progress...");
+    }
   }
 }
 
+// Fetch the current players turn
 void getCurrentPlayer() {
-  if (!getPlayer) {
-    getPlayer = true;
+  if (!playerState) {
+    playerState = true;
 
     AsyncClient* asyncClient = new AsyncClient();
 
@@ -131,7 +136,8 @@ void getCurrentPlayer() {
       Serial.print("Data: ");
       Serial.println(response);
 
-      DynamicJsonDocument tempDoc(1024); // Create a temporary JSON document
+      // Deserialize the current player response
+      DynamicJsonDocument tempDoc(1024);
       deserializeJson(tempDoc, response);
       currentPlayer = tempDoc["currentPlayer"].as<String>();
     }, nullptr);
@@ -140,19 +146,34 @@ void getCurrentPlayer() {
       Serial.println("Disconnected");
       c->close();
       delete c; // Free memory after disconnection
-      getPlayer = false;
+      playerState = false;
     }, nullptr);
 
     if (!asyncClient->connect(serverAddress, serverPort)) {
       Serial.println("Connection failed");
       delete asyncClient;
-      getPlayer = false;
+      playerState = false;
     } else {
       Serial.println("Current player update in progress...");
     }
   }
 }
 
+// Update the LEDs based on the current board state
+void updateLeds(JsonDocument &doc) {
+  JsonArray grid = doc["grid"].as<JsonArray>();
+
+  for (JsonObject cell : grid) {
+    int x = cell["x"];
+    int y = cell["y"];
+    const char* marker = cell["marker"];
+
+    updateCellLeds(x, y, marker);
+  }
+  FastLED.show();
+}
+
+// Update LEDs for a specific cell based on the marker
 void updateCellLeds(int x, int y, const char* marker) {
   CRGB color;
 
@@ -168,19 +189,7 @@ void updateCellLeds(int x, int y, const char* marker) {
   }
 }
 
-void updateLeds(JsonDocument &doc) {
-  JsonArray grid = doc["grid"].as<JsonArray>();
-
-  for (JsonObject cell : grid) {
-    int x = cell["x"];
-    int y = cell["y"];
-    const char* marker = cell["marker"];
-
-    updateCellLeds(x, y, marker);
-  }
-  FastLED.show();
-}
-
+// Check and mark cells when players interact with the pressure pads
 void checkAndMarkCells(JsonDocument &doc) {
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
@@ -194,6 +203,7 @@ void checkAndMarkCells(JsonDocument &doc) {
   }
 }
 
+// Send a request to the server to mark a cell with the current players marker
 void markCell(int x, int y, String marker) {
   String data = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
 
@@ -214,6 +224,7 @@ void markCell(int x, int y, String marker) {
   }
 }
 
+// Check if there is a winner
 void checkWinner() {
   if (client.connect(serverAddress, serverPort)) {
     client.printf("GET game/0/check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
@@ -260,6 +271,22 @@ void checkWinner() {
   }
 }
 
+// Blink the LEDs of the winning cells
+void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
+  for (int i = 0; i < 6; i++) {
+    int ledIndex1 = ledMappings[x1][y1][i];
+    int ledIndex2 = ledMappings[x2][y2][i];
+    int ledIndex3 = ledMappings[x3][y3][i];
+    
+    leds[ledIndex1] = CRGB::Black; // Turn on LED 1
+    leds[ledIndex2] = CRGB::Black; // Turn on LED 2
+    leds[ledIndex3] = CRGB::Black; // Turn on LED 3
+  }
+  FastLED.show();
+  delay(1500); // Blink duration
+}
+
+// Reset the game by sending a reset request to the server
 void resetGame() {
   Serial.println("Resetting game...");
 
@@ -278,18 +305,4 @@ void resetGame() {
   } else {
     Serial.println("Failed to connect to server.");
   }
-}
-
-void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
-  for (int i = 0; i < 6; i++) {
-    int ledIndex1 = ledMappings[x1][y1][i];
-    int ledIndex2 = ledMappings[x2][y2][i];
-    int ledIndex3 = ledMappings[x3][y3][i];
-    
-    leds[ledIndex1] = CRGB::Black; // Turn on LED 1
-    leds[ledIndex2] = CRGB::Black; // Turn on LED 2
-    leds[ledIndex3] = CRGB::Black; // Turn on LED 3
-  }
-  FastLED.show();
-  delay(1000); // Blink duration
 }
