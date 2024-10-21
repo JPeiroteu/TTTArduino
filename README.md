@@ -34,11 +34,22 @@ The ESP32 controller facilitates real-time communication and control of the LED 
    - AsyncTCP
    - ArduinoJson
    - ArduinoUnit
+  
+   Install these libraries using the Arduino Library Manager (`Sketch > Include Library > Manage Libraries`).
+  
+4. **Add `wifi_credentials.h` to the Project:**
+   - Create a file named wifi_credentials.h in the project directory.
+   - Define your WiFi credentials (SSID and password) in this file. This file is essential for the ESP32 to connect to your WiFi network. Open the file and add the following lines:
 
-Install these libraries using the Arduino Library Manager (`Sketch > Include Library > Manage Libraries`).
+```cpp
+const char* ssid = "your_wifi_ssid";
+const char* password = "your_wifi_password";
+```
 
 ## Circuit Design
-![Coming Soon]()
+<div align="center">
+    <img align="center" src="https://github.com/user-attachments/assets/314a2dbb-69c2-4a78-b25d-1c8270872a10" alt="Sketch" width="700" />
+</div>
 
 ## Usage
 
