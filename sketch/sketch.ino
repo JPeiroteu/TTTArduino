@@ -291,7 +291,7 @@ void resetGame() {
   Serial.println("Resetting game...");
 
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("GET game/0/reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+    client.printf("POST game/0/reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
     while (client.connected()) {
       if (client.available()) {
