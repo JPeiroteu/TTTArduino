@@ -81,7 +81,7 @@ void initializeBoard() {
 
 void newGameBoard() {
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("POST /new_game/0 HTTP/1.1\r\nHost: %s\r\n\r\n", serverAddress);
+    client.printf("POST /new_game/99 HTTP/1.1\r\nHost: %s\r\n\r\n", serverAddress);
 
     while (client.connected() || client.available()) {
       if (client.available()) {
@@ -104,13 +104,13 @@ void getBoardState() {
 
     asyncClient->onConnect([](void* arg, AsyncClient* c) {
       Serial.println("Connected, getting board ...");
-      c->write(("GET game/0/board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
+      c->write(("GET game/99/board HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
     }, nullptr);
 
     asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
       String boardState = String((char*)data).substring(0, len);
-      Serial.print("Data: ");
-      Serial.println(boardState);
+      //Serial.print("Data: ");
+      //Serial.println(boardState);
       if (boardState.indexOf("\"error\": \"Game deleted due to inactivity\"") >= 0) {
         newGameBoard();
       }
@@ -148,7 +148,7 @@ void getCurrentPlayer() {
 
     asyncClient->onConnect([](void* arg, AsyncClient* c) {
       Serial.println("Connected, getting current player ...");
-      c->write(("GET game/0/player/current HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
+      c->write(("GET game/99/player/current HTTP/1.1\r\nHost: " + String(serverAddress) + "\r\nConnection: close\r\n\r\n").c_str());
     }, nullptr);
 
     asyncClient->onData([](void* arg, AsyncClient* c, void* data, size_t len) {
@@ -228,14 +228,14 @@ void markCell(int x, int y, String marker) {
   String data = "x_coord=" + String(x) + "&y_coord=" + String(y) + "&mark=" + String(marker);
 
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("POST game/0/cell/mark HTTP/1.1\r\nHost: %s\r\n"
+    client.printf("POST game/99/cell/mark HTTP/1.1\r\nHost: %s\r\n"
       "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n%s",
       serverAddress, data.length(), data.c_str());
 
     while (client.connected() || client.available()) {
       if (client.available()) {
         String line = client.readStringUntil('\n');
-        Serial.println(line);
+        //Serial.println(line);
       }
     }
     client.stop();
@@ -247,7 +247,7 @@ void markCell(int x, int y, String marker) {
 // Check if there is a winner
 void checkWinner() {
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("GET game/0/check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+    client.printf("GET game/99/check_winner HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
     String response = "";
     bool isBody = false;
@@ -308,10 +308,8 @@ void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
 
 // Reset the game by sending a reset request to the server
 void resetGame() {
-  Serial.println("Resetting game...");
-
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("POST game/0/reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
+    client.printf("POST game/99/reset_board HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverAddress);
 
     while (client.connected()) {
       if (client.available()) {
