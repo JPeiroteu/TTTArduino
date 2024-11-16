@@ -61,7 +61,6 @@ void connectToWiFi() {
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
     Serial.println("Attempting to connect to WiFi...");
   }
 
@@ -293,17 +292,25 @@ void checkWinner() {
 
 // Blink the LEDs of the winning cells
 void blinkWinningCells(int x1, int y1, int x2, int y2, int x3, int y3) {
+  CRGB color = leds[ledMappings[x1][y1][0]];
+
   for (int i = 0; i < 6; i++) {
-    int ledIndex1 = ledMappings[x1][y1][i];
-    int ledIndex2 = ledMappings[x2][y2][i];
-    int ledIndex3 = ledMappings[x3][y3][i];
-    
-    leds[ledIndex1] = CRGB::Black; // Turn on LED 1
-    leds[ledIndex2] = CRGB::Black; // Turn on LED 2
-    leds[ledIndex3] = CRGB::Black; // Turn on LED 3
+    leds[ledMappings[x1][y1][i]] = CRGB::Black;
+    leds[ledMappings[x2][y2][i]] = CRGB::Black;
+    leds[ledMappings[x3][y3][i]] = CRGB::Black;
   }
+
   FastLED.show();
-  delay(1500); // Blink duration
+  delay(500); // Blink duration
+  
+  for (int i = 0; i < 6; i++) {
+    leds[ledMappings[x1][y1][i]] = color;
+    leds[ledMappings[x2][y2][i]] = color;
+    leds[ledMappings[x3][y3][i]] = color;
+  }
+  
+  FastLED.show();
+  delay(500); // Blink duration
 }
 
 // Reset the game by sending a reset request to the server
