@@ -43,6 +43,7 @@ void setup() {
 
 void loop() {
   getBoardState();
+  
   updateLeds(doc);
   checkAndMarkCells(doc);
   checkWinner();
@@ -78,6 +79,22 @@ void initializeBoard() {
   }
 }
 
+void newGameBoard() {
+  if (client.connect(serverAddress, serverPort)) {
+    client.printf("POST /new_game/0 HTTP/1.1\r\nHost: %s\r\n\r\n", serverAddress);
+
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        Serial.println(line);
+      }
+    }
+    client.stop();
+  } else {
+    Serial.println("Failed to connect to server");
+  }
+}
+
 // Fetch the current board state from the server
 void getBoardState() {
   if (!boardState) {
@@ -94,6 +111,9 @@ void getBoardState() {
       String boardState = String((char*)data).substring(0, len);
       Serial.print("Data: ");
       Serial.println(boardState);
+      if (boardState.indexOf("\"error\": \"Game deleted due to inactivity\"") >= 0) {
+        newGameBoard();
+      }
 
       // Deserialize the board state into a temporary JSON document
       DynamicJsonDocument tempDoc(1024);
@@ -164,8 +184,8 @@ void updateLeds(JsonDocument &doc) {
   JsonArray grid = doc["grid"].as<JsonArray>();
 
   for (JsonObject cell : grid) {
-    int x = cell["x"];
-    int y = cell["y"];
+    int x = cell["x_coord"];
+    int y = cell["y_coord"];
     const char* marker = cell["marker"];
 
     updateCellLeds(x, y, marker);
@@ -205,7 +225,7 @@ void checkAndMarkCells(JsonDocument &doc) {
 
 // Send a request to the server to mark a cell with the current players marker
 void markCell(int x, int y, String marker) {
-  String data = "x=" + String(x) + "&y=" + String(y) + "&mark=" + String(marker);
+  String data = "x_coord=" + String(x) + "&y_coord=" + String(y) + "&mark=" + String(marker);
 
   if (client.connect(serverAddress, serverPort)) {
     client.printf("POST game/0/cell/mark HTTP/1.1\r\nHost: %s\r\n"
@@ -251,14 +271,14 @@ void checkWinner() {
       if (!error) {
         JsonObject winnerData = tempDoc["win_cell"];
         if (!winnerData.isNull()) {
-          int x1 = winnerData["x"];
-          int y1 = winnerData["y"];
+          int x1 = winnerData["x_coord"];
+          int y1 = winnerData["y_coord"];
           JsonObject winnerData2 = tempDoc["win_cell2"];
-          int x2 = winnerData2["x"];
-          int y2 = winnerData2["y"];
+          int x2 = winnerData2["x_coord"];
+          int y2 = winnerData2["y_coord"];
           JsonObject winnerData3 = tempDoc["win_cell3"];
-          int x3 = winnerData3["x"];
-          int y3 = winnerData3["y"];
+          int x3 = winnerData3["x_coord"];
+          int y3 = winnerData3["y_coord"];
           
           blinkWinningCells(x1, y1, x2, y2, x3, y3);
           Serial.println(response);
