@@ -38,7 +38,9 @@ The ESP32 controller facilitates real-time communication and control of the LED 
 Install these libraries using the Arduino Library Manager (`Sketch > Include Library > Manage Libraries`).
 
 ## Circuit Design
-![Coming Soon]()
+<p align="center">
+  <img width="600" src="https://github.com/user-attachments/assets/524cfbd1-85b8-4ce7-8113-f600cb47e375">
+</p>
 
 ## Usage
 
