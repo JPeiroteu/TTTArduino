@@ -79,8 +79,10 @@ void initializeBoard() {
 }
 
 void newGameBoard() {
+  const String secretToken = "Secret12345";
+
   if (client.connect(serverAddress, serverPort)) {
-    client.printf("POST /new_game/99 HTTP/1.1\r\nHost: %s\r\n\r\n", serverAddress);
+    client.printf("POST /new_game/99 HTTP/1.1\r\nHost: %s\r\nX-Secure-Token: %s\r\n\r\n", serverAddress, secretToken.c_str());
 
     while (client.connected() || client.available()) {
       if (client.available()) {
@@ -110,7 +112,7 @@ void getBoardState() {
       String boardState = String((char*)data).substring(0, len);
       //Serial.print("Data: ");
       //Serial.println(boardState);
-      if (boardState.indexOf("\"error\": \"Game deleted due to inactivity\"") >= 0) {
+      if (boardState.indexOf("\"error\": \"Inactive game.\"") >= 0) {
         newGameBoard();
       }
 
